@@ -1,4 +1,4 @@
-# MultiScanner
+# VersaScanner
 
 A security tool that performs scans on a target using OpenVAS, Zap, and Nexpose, then compiles and combines the scan findings.
 
