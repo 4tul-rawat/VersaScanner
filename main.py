@@ -1,71 +1,48 @@
-#!/usr/bin/env python3
-
-import sys
+from zapv2 import ZAPv2
 import time
-import logging
-import argparse
 
-from dotenv import load_dotenv, find_dotenv
+# ZAP Proxy settings
+zap_address = 'localhost'
+zap_port = '8080'
+zap_api_key = 'your_api_key'  # Change to your API key, if you have set one
 
-from scanners.zap_scanner import ZapScanner
-from scanners.nexpose_scanner import NexposeScanner
-from scanners.openvas_scanner import OpenVASScanner
+# Target to scan
+target_url = 'http://www.itsecgames.com/'  # Change to your target
 
+# Initialize the ZAP API
+zap = ZAPv2(apikey=zap_api_key, proxies={'http': f'http://{zap_address}:{zap_port}', 'https': f'http://{zap_address}:{zap_port}'})
 
-load_dotenv(find_dotenv())
+# Start a new session
+zap.core.new_session(name='newsession', overwrite=True)
 
-logging.basicConfig(filename='scanner.log', level=logging.INFO)
+# Spider the target
+print(f'Spidering target {target_url}')
+scan_id = zap.spider.scan(target_url)
+time.sleep(2)
 
-def main(config):
+# Wait for the spider to finish
+while int(zap.spider.status(scan_id)) < 100:
+    print(f'Spider progress: {zap.spider.status(scan_id)}%')
+    time.sleep(2)
+print('Spider completed')
 
-    scanners = [ZapScanner(), NexposeScanner(), OpenVASScanner()]
+# Start the active scanner
+print(f'Scanning target {target_url}')
+scan_id = zap.ascan.scan(target_url)
+while int(zap.ascan.status(scan_id)) < 100:
+    print(f'Scan progress: {zap.ascan.status(scan_id)}%')
+    time.sleep(5)
+print('Scan completed')
 
-    scan_results = {}
-    scan_status_list = []
+# Report the results
+print('Hosts: {}'.format(', '.join(zap.core.hosts)))
+print('Alerts: ')
+alerts = zap.core.alerts(baseurl=target_url)
+for alert in alerts:
+    print(f"Alert: {alert['alert']}, Risk: {alert['risk']}, URL: {alert['url']}")
 
-    if config['target']:
-        for scanner in scanners:
-            scanner.start(config['scan_name'], config['target'])
-            time.sleep(1)
+# Optionally, save the session
+# zap.core.save_session(name='mysession')
 
-    elif config['pause']:
-        for scanner in scanners:
-            scanner.pause(config['scan_name'])
-            time.sleep(1)
-        
-    elif config['resume']:
-        for scanner in scanners:
-            scanner.resume(config['scan_name'])
-            time.sleep(1)
-    else:
-        for scanner in scanners:
-            scanner.get_scan_status(config.get('scan_name'), scan_status_list)
-            scanner.get_scan_results(config.get('scan_name'), scan_results)
-            time.sleep(2)
-
-    scanner.print_scan_status(scan_status_list)
-    scanner.print_report(scan_results)
-    
-    return True
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--scan-name', required=True, help='Specify a scan name')
-    parser.add_argument('-i', '--scan-id', help='Specify the scan id', type=int)
-    parser.add_argument('-t', '--target', help='Specify the Target URL or IP')
-    parser.add_argument('-p', '--pause', action='store_true', help='Pause a specified scan')
-    parser.add_argument('-r', '--resume', action='store_true', help='Resume a specified scan')
-    parser.add_argument('-v', '--version', action='version', version='MultiScanner 1.0')
-    args = parser.parse_args()
-
-    config = {
-        'scan_name': args.scan_name,
-        'target': args.target,
-        'pause': args.pause,
-        'resume': args.resume
-    }
-    
-    main(config)
-
-    exit(0)
+# Optionally, close ZAP
+# zap.core.shutdown()
